@@ -1,0 +1,39 @@
+@page "/login"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<h1>Login</h1>
+
+<EditForm Model="_model" OnValidSubmit="SubmitAsync">
+    <DataAnnotationsValidator/>
+    
+    <InputText @bind-Value="_model.Email" type="email" placeholder="Email" />
+    <ValidationMessage For="() => _model.Email" />
+    
+    <InputText @bind-Value="_model.Password" type="password" placeholder="password" />
+    <ValidationMessage For="() => _model.Password"/>
+    
+    <label><InputCheckbox @bind-Value="_model.RememberMe" />Remember me</label>
+    <button type="submit">Log in</button>
+</EditForm>
+
+@if (_error is not null) { <p class="text-danger">@_error</p> }
+<a href="/register">Create an account</a>
+
+@code {
+    private readonly LoginUserRequest _model = new();
+    private string? _error;
+
+    private async Task SubmitAsync()
+    {
+        var result = await Http.PostAsJsonAsync("api/auth/login?useCookies=true", new { _model.Email, _model.Password, _model.RememberMe });
+
+        if (result.IsSuccessStatusCode) 
+            Nav.NavigateTo("/", forceLoad: true);
+        
+        else 
+            _error = "Invalid email or password";
+    }
+
+}
