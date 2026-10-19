@@ -1,0 +1,82 @@
+@page "/register"
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@using System.Text.Json
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<h1>Create Account</h1>
+
+<EditForm Model="_model" OnValidSubmit="SubmitAsync">
+    <DataAnnotationsValidator/>
+    
+    <InputText @bind-Value="_model.Username" placeholder="Username"/>
+    <ValidationMessage For="() => _model.Username"/>
+    
+    <InputText @bind-Value="_model.FirstName" placeholder="First name"/>
+    <ValidationMessage For="() => _model.FirstName"/>
+    
+    <InputText @bind-Value="_model.Email" type="email" placeholder="Email" />
+    <ValidationMessage For="() => _model.Email"/>
+    
+    <InputText @bind-Value="_model.Password" type="password" placeholder="Password" />
+    <ValidationMessage For="() => _model.Password"/> 
+    
+    <InputText @bind-Value="_model.ConfirmPassword" type="password" placeholder="Confirm password"></InputText>
+    <ValidationMessage For="() => _model.ConfirmPassword"/>
+    
+    <button type="submit" disabled="@_submitting">Register</button>
+</EditForm>
+
+@foreach(var e in _errors) { <p class="text-danger">@e</p>}
+
+<a href="/login">Already have an account? Log in</a>
+
+@code {
+    private readonly RegisterForm _model = new();
+    private string[] _errors = [];
+    private bool _submitting;
+
+    private async Task SubmitAsync()
+    {
+        _submitting = true;
+
+        try
+        {
+            var result = await Http.PostAsJsonAsync("api/auth/register", _model.ToRequest());
+
+            // Only a 400 carries validation errors; anything else (e.g. a 500) may have no JSON body
+            if (result.StatusCode == HttpStatusCode.BadRequest)
+            {
+                var problem = await result.Content.ReadFromJsonAsync<Problem>();
+                _errors = problem?.Errors?.SelectMany(e => e.Value).ToArray() ?? ["Registration failed."];
+                return;
+            }
+
+            if (!result.IsSuccessStatusCode)
+            {
+                _errors = ["Something went wrong on our end. Please try again."];
+                return;
+            }
+
+            // Automatically login user once they've successfully registered
+            await Http.PostAsJsonAsync("api/auth/login?useCookies=true", new { _model.Email, _model.Password });
+            Nav.NavigateTo("/", forceLoad: true);
+
+        }
+        catch (HttpRequestException)
+        {
+            _errors = ["We couldn't process your request. Please check your connection and try again."];
+        }
+        catch (JsonException)
+        {
+            // A 400 whose body isn't the expected validation format
+            _errors = ["Registration failed."];
+        }
+        finally
+        {
+            _submitting = false;
+        }
+    }
+
+    private record Problem(Dictionary<string, string[]>? Errors);
+}

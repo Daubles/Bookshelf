@@ -1,0 +1,13 @@
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+@inject HttpClient Http
+@inject NavigationManager Nav
+
+<button class="btn btn-link" @onclick="LogoutAsync">Log out</button>
+
+@code {
+    private async Task LogoutAsync()
+    {
+        await Http.PostAsync("api/auth/logout", null);
+        Nav.NavigateTo("/login", forceLoad: true);
+    }
+}
