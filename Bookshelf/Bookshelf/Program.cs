@@ -2,13 +2,14 @@ using Bookshelf.Auth;
 using Bookshelf.Components;
 using Bookshelf.Data;
 using Bookshelf.Endpoints;
+using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents()
     .AddInteractiveWebAssemblyComponents()
     .AddAuthenticationStateSerialization(o => o.SerializeAllClaims = true);
 
@@ -51,6 +52,11 @@ builder.Services.ConfigureApplicationCookie(o =>
     };
 });
 
+builder.Services.AddMudServices();
+
+// Interactive pages are prerendered on the server, so components that inject HttpClient need one here too
+builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(sp.GetRequiredService<NavigationManager>().BaseUri) });
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -76,7 +82,6 @@ app.UseAntiforgery();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(typeof(Bookshelf.Client._Imports).Assembly);
 

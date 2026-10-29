@@ -1,39 +1,75 @@
 @page "/login"
-@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 @inject HttpClient Http
 @inject NavigationManager Nav
 
-<h1>Login</h1>
-
-<EditForm Model="_model" OnValidSubmit="SubmitAsync">
-    <DataAnnotationsValidator/>
-    
-    <InputText @bind-Value="_model.Email" type="email" placeholder="Email" />
-    <ValidationMessage For="() => _model.Email" />
-    
-    <InputText @bind-Value="_model.Password" type="password" placeholder="password" />
-    <ValidationMessage For="() => _model.Password"/>
-    
-    <label><InputCheckbox @bind-Value="_model.RememberMe" />Remember me</label>
-    <button type="submit">Log in</button>
-</EditForm>
-
-@if (_error is not null) { <p class="text-danger">@_error</p> }
-<a href="/register">Create an account</a>
+<MudText HtmlTag="h1" Class="form-header mt-16">Log in</MudText>
+<MudContainer Class="mt-4" MaxWidth="MaxWidth.ExtraSmall">
+        <MudForm @ref="_form" Model="_model">
+            <MudStack Spacing="2">
+                <MudTextField Label="Email" Variant="Variant.Outlined" @bind-Value="_model.Email" For="() => _model.Email" InputType="InputType.Email" />
+                <MudTextField Label="Password" Variant="Variant.Outlined" @bind-Value="_model.Password" For="() => _model.Password" InputType="_password.InputType" 
+                              Adornment="Adornment.End" AdornmentIcon="@_password.Icon" OnAdornmentClick="_password.Toggle" AdornmentAriaLabel="Show Password"/>
+                <MudCheckBox @bind-Value="_model.RememberMe">Remember me</MudCheckBox>
+                @foreach (var e in _errors)
+                {
+                    <MudAlert Class="my-2" Severity="Severity.Error" Dense="true">@e</MudAlert>
+                }
+                <MudButton Size="Size.Large" Color="Color.Primary" Variant="Variant.Filled" FullWidth="true" OnClick="@(async () => await SubmitAsync())"
+                           Disabled="_submitting">Log in</MudButton>
+            </MudStack>
+        </MudForm>
+        <MudText Class="mt-8" Align="Align.Center">New to Bookshelf?</MudText>
+        <MudButton Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" Href="/register">Sign up</MudButton>
+</MudContainer>
 
 @code {
     private readonly LoginUserRequest _model = new();
-    private string? _error;
+
+    private string[] _errors = [];
+    private bool _submitting;
+    private MudForm _form = null!;
+
+    private readonly PasswordVisibility _password = new();
 
     private async Task SubmitAsync()
     {
-        var result = await Http.PostAsJsonAsync("api/auth/login?useCookies=true", new { _model.Email, _model.Password, _model.RememberMe });
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
 
-        if (result.IsSuccessStatusCode) 
-            Nav.NavigateTo("/", forceLoad: true);
-        
-        else 
-            _error = "Invalid email or password";
+        _submitting = true;
+        _errors = [];
+
+        try
+        {
+            var result = await Http.PostAsJsonAsync("api/auth/login", new { _model.Email, _model.Password, _model.RememberMe });
+
+            if (result.IsSuccessStatusCode)
+            {
+                Nav.NavigateTo("/", forceLoad: true);
+                return;
+            }
+
+            if (result.StatusCode == HttpStatusCode.BadRequest)
+            {
+                var errors = await ProblemErrors.ReadAsync(result);
+                _errors = errors.Length > 0 ? errors : ["Please check your email and password and try again."];
+                return;
+            }
+
+            _errors = result.StatusCode switch
+            {
+                HttpStatusCode.Unauthorized => ["Invalid email or password."],
+                HttpStatusCode.TooManyRequests => ["Too many failed login attempts. Your account is locked, please try again later."],
+                _ => ["Something went wrong on our end. Please try again."]
+            };
+        }
+        catch (HttpRequestException)
+        {
+            _errors = ["We couldn't process your request. Please check your connection and try again."];
+        }
+        finally
+        {
+            _submitting = false;
+        }
     }
-
 }

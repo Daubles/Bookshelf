@@ -16,10 +16,11 @@ The app needs a PostgreSQL connection string named `Bookshelf`. It isn't in apps
 
 ## Architecture
 
-Blazor Web App on .NET 10, using both Interactive Server and Interactive WebAssembly render modes.
+Blazor Web App on .NET 10 with global Interactive WebAssembly rendering (prerendered on the server). There is no Interactive Server mode.
 
-- **`Bookshelf/Bookshelf`** (server host): `Program.cs` wires everything up: Razor components, ASP.NET Core Identity (`AddIdentityCore<AppUser>` plus cookies, not the full Identity UI), EF Core with Npgsql, MudBlazor, and the minimal API endpoints. `Components/` contains the root `App.razor`, `Routes.razor` (`AuthorizeRouteView`, which also discovers routes in the client assembly) and `MainLayout.razor` (MudBlazor layout, dark mode).
-- **`Bookshelf/Bookshelf.Client`** (WASM): pages that run in the browser (e.g. `Pages/Login.razor`, `Pages/Register.razor`, set to `InteractiveWebAssemblyRenderMode(prerender: false)`). `Authentication/` holds the request DTOs (`RegisterUserRequest`, `LoginUserRequest`) with DataAnnotations validation. The server references these too, so the DTOs shared by client and server live here.
+- **`Bookshelf/Bookshelf`** (server host): `Program.cs` wires everything up: Razor components, ASP.NET Core Identity (`AddIdentityCore<AppUser>` plus cookies, not the full Identity UI), EF Core with Npgsql, MudBlazor, and the minimal API endpoints. `Components/App.razor` is the root document; it sets the render mode on `<Routes>` and `<HeadOutlet>` to WebAssembly unless the page has `[ExcludeFromInteractiveRouting]`. Only pages that must run on the server stay here, statically rendered with that attribute (e.g. `Components/Pages/Error.razor`, which needs `HttpContext`).
+- **`Bookshelf/Bookshelf.Client`** (WASM): everything interactive lives here, because WebAssembly can only run components from this assembly. That includes `Routes.razor` (`AuthorizeRouteView`), `Layout/MainLayout.razor` (MudBlazor layout, dark mode, MudBlazor providers) and the pages in `Pages/`. Pages don't set their own `@rendermode`; they inherit the global one. `Authentication/` holds the request DTOs (`RegisterUserRequest`, `LoginUserRequest`) with DataAnnotations validation, plus shared helpers (`PasswordVisibility`, `ProblemErrors`, `LogoutButton`). The server references these too, so the DTOs shared by client and server live here.
+- Because pages are prerendered, any service a client component injects must also be registered on the server. For example, the server registers an `HttpClient` for components that inject one.
 
 ### Auth flow
 - Client pages call JSON endpoints under `/api/auth/*` (`register`, `login`, `logout`), defined in `Bookshelf/Bookshelf/Endpoints/AuthenticationEndpoints.cs` and mapped through `app.MapAuthEndpoints()`. After a successful login the client does a full page reload (`forceLoad: true`) so the new cookie takes effect.
