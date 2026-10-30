@@ -14,8 +14,9 @@ builder.Services.AddRazorComponents()
     .AddAuthenticationStateSerialization(o => o.SerializeAllClaims = true);
 
 builder.Services.AddValidation();
-
 builder.Services.AddProblemDetails();
+
+builder.Services.AddOpenApi();
 
 var connectionString = builder.Configuration.GetConnectionString("Bookshelf")
     ?? throw new InvalidOperationException("Connection string 'Bookshelf' not found.");
@@ -79,6 +80,16 @@ app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
 app.UseAntiforgery();
+
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi("/api/openapi/{documentName}.json");
+
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/api/openapi/v1.json", "Bookshelf v1");
+    });
+}
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
