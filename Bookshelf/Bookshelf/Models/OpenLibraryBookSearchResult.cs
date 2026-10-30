@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices.JavaScript;
 using System.Text.Json.Serialization;
 
 namespace Bookshelf.Models;
@@ -9,6 +10,6 @@ public record OpenLibraryBookSearchResult(
 public record OpenLibraryDoc(
     [property: JsonPropertyName("key")] string Key,
     [property: JsonPropertyName("title")] string Title,
-    [property: JsonPropertyName("author_name")] string AuthorName,
-    [property: JsonPropertyName("first_publish_year")] string FirstPublishYear
+    [property: JsonPropertyName("author_name")] string[] AuthorName,
+    [property: JsonPropertyName("first_publish_year")] int FirstPublishYear
     );

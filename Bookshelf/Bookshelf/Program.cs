@@ -97,5 +97,6 @@ app.MapRazorComponents<App>()
     .AddAdditionalAssemblies(typeof(Bookshelf.Client._Imports).Assembly);
 
 app.MapAuthEndpoints();
+app.MapBookEndpoints();
 
 app.Run();
