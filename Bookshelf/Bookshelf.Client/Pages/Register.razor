@@ -1,54 +1,54 @@
 @page "/register"
-@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
-@using System.Text.Json
 @inject HttpClient Http
 @inject NavigationManager Nav
 
-<h1>Create Account</h1>
-
-<EditForm Model="_model" OnValidSubmit="SubmitAsync">
-    <DataAnnotationsValidator/>
-    
-    <InputText @bind-Value="_model.Username" placeholder="Username"/>
-    <ValidationMessage For="() => _model.Username"/>
-    
-    <InputText @bind-Value="_model.FirstName" placeholder="First name"/>
-    <ValidationMessage For="() => _model.FirstName"/>
-    
-    <InputText @bind-Value="_model.Email" type="email" placeholder="Email" />
-    <ValidationMessage For="() => _model.Email"/>
-    
-    <InputText @bind-Value="_model.Password" type="password" placeholder="Password" />
-    <ValidationMessage For="() => _model.Password"/> 
-    
-    <InputText @bind-Value="_model.ConfirmPassword" type="password" placeholder="Confirm password"></InputText>
-    <ValidationMessage For="() => _model.ConfirmPassword"/>
-    
-    <button type="submit" disabled="@_submitting">Register</button>
-</EditForm>
-
-@foreach(var e in _errors) { <p class="text-danger">@e</p>}
-
-<a href="/login">Already have an account? Log in</a>
+<MudText HtmlTag="h1" Class="form-header mt-16">Create Account</MudText>
+<MudContainer Class="mt-4" MaxWidth="MaxWidth.ExtraSmall">
+    <MudForm @ref="_form" Model="_model">
+        <MudStack Spacing="2">
+            <MudTextField Label="Username" Variant="Variant.Outlined" @bind-Value="_model.Username" For="() => _model.Username" />
+            <MudTextField Label="Email" Variant="Variant.Outlined" @bind-Value="_model.Email" For="() => _model.Email" InputType="InputType.Email" />
+            <MudTextField Label="First name" Variant="Variant.Outlined" @bind-Value="_model.FirstName" For="() => _model.FirstName" />
+            <MudTextField Label="Password" Variant="Variant.Outlined" @bind-Value="_model.Password" For="() => _model.Password" InputType="_password.InputType" 
+                          Adornment="Adornment.End" AdornmentIcon="@_password.Icon" OnAdornmentClick="_password.Toggle" AdornmentAriaLabel="Show password"/>
+            <MudTextField Label="Confirm password" Variant="Variant.Outlined" @bind-Value="_model.ConfirmPassword" For="() => _model.ConfirmPassword" InputType="_password.InputType" 
+                          Adornment="Adornment.End" AdornmentIcon="@_password.Icon" OnAdornmentClick="_password.Toggle" AdornmentAriaLabel="Show password"/>
+            @foreach (var e in _errors)
+            {
+                <MudAlert Severity="Severity.Error" Dense="true">@e</MudAlert>
+            }
+            <MudButton Size="Size.Large" Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" OnClick="@(async () => await SubmitAsync())" 
+                       Disabled="_submitting">Register</MudButton>
+        </MudStack>
+    </MudForm>
+    <MudText Class="mt-8" Align="Align.Center">Already have an account?</MudText>
+    <MudButton Size="Size.Large" Variant="Variant.Outlined" Color="Color.Primary" FullWidth="true" Href="/login">Login</MudButton>
+</MudContainer>
 
 @code {
     private readonly RegisterForm _model = new();
     private string[] _errors = [];
     private bool _submitting;
+    private MudForm _form = null!;
+    
+    private readonly PasswordVisibility _password = new();
 
     private async Task SubmitAsync()
     {
+        await _form.ValidateAsync();
+        if (!_form.IsValid) return;
+
         _submitting = true;
+        _errors = [];
 
         try
         {
             var result = await Http.PostAsJsonAsync("api/auth/register", _model.ToRequest());
 
-            // Only a 400 carries validation errors; anything else (e.g. a 500) may have no JSON body
             if (result.StatusCode == HttpStatusCode.BadRequest)
             {
-                var problem = await result.Content.ReadFromJsonAsync<Problem>();
-                _errors = problem?.Errors?.SelectMany(e => e.Value).ToArray() ?? ["Registration failed."];
+                var errors = await ProblemErrors.ReadAsync(result);
+                _errors = errors.Length > 0 ? errors : ["Registration failed. Please check your details and try again."];
                 return;
             }
 
@@ -58,25 +58,27 @@
                 return;
             }
 
-            // Automatically login user once they've successfully registered
-            await Http.PostAsJsonAsync("api/auth/login?useCookies=true", new { _model.Email, _model.Password });
-            Nav.NavigateTo("/", forceLoad: true);
+            // Automatically login user once they've successfully registered; the account exists either way,
+            // so if that fails send them to the login page rather than home signed out
+            var loggedIn = false;
+            try
+            {
+                var login = await Http.PostAsJsonAsync("api/auth/login", new { _model.Email, _model.Password });
+                loggedIn = login.IsSuccessStatusCode;
+            }
+            catch (HttpRequestException)
+            {
+            }
 
+            Nav.NavigateTo(loggedIn ? "/" : "/login", forceLoad: true);
         }
         catch (HttpRequestException)
         {
             _errors = ["We couldn't process your request. Please check your connection and try again."];
-        }
-        catch (JsonException)
-        {
-            // A 400 whose body isn't the expected validation format
-            _errors = ["Registration failed."];
         }
         finally
         {
             _submitting = false;
         }
     }
-
-    private record Problem(Dictionary<string, string[]>? Errors);
 }

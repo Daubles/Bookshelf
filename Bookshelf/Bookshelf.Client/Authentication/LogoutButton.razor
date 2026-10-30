@@ -1,8 +1,7 @@
-@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 @inject HttpClient Http
 @inject NavigationManager Nav
 
-<button class="btn btn-link" @onclick="LogoutAsync">Log out</button>
+<MudButton OnClick="LogoutAsync">Log out</MudButton>
 
 @code {
     private async Task LogoutAsync()
