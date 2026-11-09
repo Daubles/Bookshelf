@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@inject NavigationManager Navigation
 
 <MudThemeProvider Theme="_bookshelfTheme" IsDarkMode="true"/>
 <MudPopoverProvider />
@@ -7,6 +8,11 @@
     <MudAppBar>
         <MudText Class="brand-title">Bookshelf</MudText>
         <MudSpacer />
+        <div class="nav-search">
+            <MudTextField @bind-Value="_searchString" Immediate="true" OnKeyDown="OnSearchKeyDown" Placeholder="Search books" Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search" OnAdornmentClick="SearchBook" IconSize="Size.Small" Variant="Variant.Filled"
+                          Margin="Margin.Dense" />
+        </div>
         <AuthorizeView>
             <Authorized>
                 <LogoutButton />
@@ -37,4 +43,18 @@
             Primary = "#6495ED"
         }
     };
+
+    private string? _searchString;
+
+    private void OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") SearchBook();
+    }
+
+    private void SearchBook()
+    {
+        if (string.IsNullOrWhiteSpace(_searchString)) return;
+
+        Navigation.NavigateTo($"/search?q={Uri.EscapeDataString(_searchString.Trim())}");
+    }
 }
