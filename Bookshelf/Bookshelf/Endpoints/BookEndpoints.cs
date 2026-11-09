@@ -1,3 +1,4 @@
+using Bookshelf.Client.Models;
 using Bookshelf.Models;
 
 namespace Bookshelf.Endpoints;
@@ -16,7 +17,7 @@ public static class BookEndpoints
 
         routeBuilder.MapGet("search/{query}", async (string query) =>
         {
-            var olSearchResult = await HttpClient.GetFromJsonAsync<OpenLibraryBookSearchResult>($"{OpenLibraryUri}?q={query}&limit=5");
+            var olSearchResult = await HttpClient.GetFromJsonAsync<OpenLibraryBookSearchResult>($"{OpenLibraryUri}?q={Uri.EscapeDataString(query)}&limit=5");
             
             var searchResult = olSearchResult?.Docs
                 .Select(book => new BookSummaryDto { OpenLibraryKey = book.Key, Title = book.Title, AuthorName = book.AuthorName, FirstPublishYear = book.FirstPublishYear })
