@@ -1,5 +1,6 @@
 @page "/search"
 @inject HttpClient Http
+@implements IDisposable
 
 <PageTitle>Search</PageTitle>
 
@@ -38,10 +39,18 @@
     private bool _loading = true;
     private string? _error;
 
+    // Cancelled when a new search starts, so a slower earlier search can't overwrite its results
+    private CancellationTokenSource? _searchCts;
+
     protected override async Task OnParametersSetAsync()
     {
         // Skip the prerender pass so each search only calls Open Library once
         if (!RendererInfo.IsInteractive) return;
+
+        _searchCts?.CancelAsync();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+        var ct = _searchCts.Token;
 
         _books = [];
         _error = null;
@@ -56,15 +65,27 @@
 
         try
         {
-            _books = await Http.GetFromJsonAsync<List<BookSummaryDto>>($"api/book/search/{Uri.EscapeDataString(Query)}") ?? [];
+            var books = await Http.GetFromJsonAsync<List<BookSummaryDto>>(
+                $"api/book/search/{Uri.EscapeDataString(Query)}", ct);
+            ct.ThrowIfCancellationRequested();
+            _books = books ?? [];
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A newer search replaced this one and owns the page state now.
+            return;
         }
         catch (HttpRequestException)
         {
             _error = "We couldn't load search results. Please try again.";
         }
-        finally
-        {
-            _loading = false;
-        }
+
+        _loading = false;
+    }
+
+    public void Dispose()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
     }
 }
