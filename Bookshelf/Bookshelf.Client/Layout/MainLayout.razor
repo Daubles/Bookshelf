@@ -36,11 +36,67 @@
 
 @code
 {
+    // Serif font for headings (h1–h6). Libre Baskerville is loaded from Google Fonts in App.razor;
+    // the rest are fallbacks if it fails to load (Baskerville ships with macOS/iOS).
+    private static readonly string[] HeadingFont =
+        ["Libre Baskerville", "Baskerville", "Baskerville Old Face", "Georgia", "serif"];
+
     private readonly MudTheme _bookshelfTheme = new()
     {
+        // "Midnight ink" dark palette: cool blue-black surfaces that sit under the cornflower primary,
+        // with a warm gilt/amber secondary (think gold-foil lettering on a book spine) and parchment text.
+        // Accents are light/mid-tone, so they carry dark contrast text (white on them fails WCAG AA).
         PaletteDark = new PaletteDark
         {
-            Primary = "#6495ED"
+            Primary = "#6495ED",              // cornflower blue
+            PrimaryContrastText = "#0E1320",
+            Secondary = "#E0A95B",            // gilt amber
+            SecondaryContrastText = "#0E1320",
+            Tertiary = "#D98B73",             // terracotta / leather binding
+            TertiaryContrastText = "#0E1320",
+            Info = "#5DB4D6",
+            InfoContrastText = "#0E1320",
+            Success = "#6CC293",
+            SuccessContrastText = "#0E1320",
+            Warning = "#F2994A",
+            WarningContrastText = "#0E1320",
+            Error = "#EF6F6C",
+            ErrorContrastText = "#0E1320",
+
+            Black = "#0B0D12",
+            Background = "#12151C",           // page
+            BackgroundGray = "#161A22",
+            Surface = "#1B1F29",              // cards, popovers, menus
+            AppbarBackground = "#161A22",
+            AppbarText = "#ECE7DF",
+            DrawerBackground = "#161A22",
+            DrawerText = "#ECE7DF",
+            DrawerIcon = "#A9AFBC",
+
+            TextPrimary = "#ECE7DF",          // warm parchment white
+            TextSecondary = "#A9AFBC",
+            TextDisabled = "#6B7280",
+            ActionDefault = "#A9AFBC",
+            ActionDisabled = "#5A6170",
+            ActionDisabledBackground = "#262B36",
+
+            LinesDefault = "#2A303C",
+            LinesInputs = "#3A4150",
+            Divider = "#2A303C",
+            DividerLight = "#222733",
+            TableLines = "#2A303C",
+            TableStriped = "#ffffff08",
+            TableHover = "#ffffff0d",
+            Skeleton = "#ffffff12",
+        },
+        Typography = new Typography
+        {
+            H1 = new H1Typography { FontFamily = HeadingFont },
+            H2 = new H2Typography { FontFamily = HeadingFont },
+            H3 = new H3Typography { FontFamily = HeadingFont },
+            H4 = new H4Typography { FontFamily = HeadingFont },
+            H5 = new H5Typography { FontFamily = HeadingFont },
+            H6 = new H6Typography { FontFamily = HeadingFont },
         }
     };
 

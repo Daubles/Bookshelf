@@ -11,12 +11,12 @@ html, body {
 }
 
 a {
-    color: #006bb7;
+    color: var(--mud-palette-primary);
 }
 
 .brand-title {
     font-family: 'Pistilli Roman', sans-serif;
-    color: cornflowerblue;
+    color: var(--mud-palette-primary);
 }
 
 .nav-search {
@@ -35,7 +35,7 @@ a {
 
 .form-header {
     text-align: center;
-    color: cornflowerblue;
+    color: var(--mud-palette-primary);
     font-size: xxx-large;
     font-family: 'Pistilli Roman', sans-serif;
     width: 100%;
@@ -87,3 +87,8 @@ h1:focus {
         right: 0.75rem;
         top: 0.5rem;
     }
+
+/* The app bar's drop shadow is invisible on a dark background, so separate it with a hairline instead */
+.mud-appbar {
+    border-bottom: 1px solid var(--mud-palette-lines-default);
+}
