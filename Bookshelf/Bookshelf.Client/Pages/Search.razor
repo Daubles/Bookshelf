@@ -1,0 +1,91 @@
+@page "/search"
+@inject HttpClient Http
+@implements IDisposable
+
+<PageTitle>Search</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
+    @if (_error is not null)
+    {
+        <MudAlert Class="my-2" Severity="Severity.Error" Dense="true">@_error</MudAlert>
+    }
+    <MudTable Items="_books" Loading="_loading" Hover="true" Breakpoint="Breakpoint.None">
+        <ToolBarContent>
+            <MudText>Search results for: @Query</MudText>
+        </ToolBarContent>
+        <RowTemplate>
+            <MudTd>
+                <MudText Typo="Typo.subtitle1">
+                    <MudLink Href="@($"/book/{context.OpenLibraryKey}")" Underline="Underline.Hover">@context.Title</MudLink>
+                    @if (context.FirstPublishYear is not null)
+                    {
+                        <span class="mud-text-secondary"> | @context.FirstPublishYear</span>
+                    }
+                </MudText>
+                <MudText Typo="Typo.body2" Class="mud-text-secondary">@string.Join(", ", context.AuthorName)</MudText>
+            </MudTd>
+        </RowTemplate>
+        <NoRecordsContent>
+            <MudText>No books found.</MudText>
+        </NoRecordsContent>
+    </MudTable>
+</MudContainer>
+
+@code {
+    [SupplyParameterFromQuery(Name = "q")]
+    public string? Query { get; set; }
+
+    private List<BookSummaryDto> _books = [];
+    private bool _loading = true;
+    private string? _error;
+
+    // Cancelled when a new search starts, so a slower earlier search can't overwrite its results
+    private CancellationTokenSource? _searchCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Skip the prerender pass so each search only calls Open Library once
+        if (!RendererInfo.IsInteractive) return;
+
+        _searchCts?.CancelAsync();
+        _searchCts?.Dispose();
+        _searchCts = new CancellationTokenSource();
+        var ct = _searchCts.Token;
+
+        _books = [];
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(Query))
+        {
+            _loading = false;
+            return;
+        }
+
+        _loading = true;
+
+        try
+        {
+            var books = await Http.GetFromJsonAsync<List<BookSummaryDto>>(
+                $"api/book/search/{Uri.EscapeDataString(Query)}", ct);
+            ct.ThrowIfCancellationRequested();
+            _books = books ?? [];
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A newer search replaced this one and owns the page state now.
+            return;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "We couldn't load search results. Please try again.";
+        }
+
+        _loading = false;
+    }
+
+    public void Dispose()
+    {
+        _searchCts?.Cancel();
+        _searchCts?.Dispose();
+    }
+}

@@ -1,0 +1,141 @@
+@page "/book/{WorkKey}"
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>@(_work?.Title ?? "Book")</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-8">
+    @if (_loading)
+    {
+        <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+    }
+    else if (_notFound)
+    {
+        <MudAlert Severity="Severity.Info">We couldn't find that book.</MudAlert>
+    }
+    else if (_error is not null)
+    {
+        <MudAlert Severity="Severity.Error">@_error</MudAlert>
+    }
+    else if (_work is not null)
+    {
+        <MudGrid Spacing="8">
+            <MudItem xs="12" sm="3">
+                <div style="max-width: 200px" class="mx-auto">
+                    @if (OpenLibraryCovers.BookCoverUrl(_work.CoverId, CoverSize.Large) is { } coverUrl)
+                    {
+                        <MudImage Src="@coverUrl" Alt="@($"Cover of {_work.Title}")" Fluid="true" Elevation="2" Class="rounded" />
+                    }
+                    else
+                    {
+                        <MudPaper Height="280px" Class="d-flex align-center justify-center" Elevation="0" Outlined="true">
+                            <MudIcon Icon="@Icons.Material.Outlined.MenuBook" Size="Size.Large" Color="Color.Default" />
+                        </MudPaper>
+                    }
+                </div>
+            </MudItem>
+            <MudItem xs="12" sm="9">
+                <MudText Typo="Typo.h3" Color="Color.Primary">@_work.Title</MudText>
+                @if (_work.Subtitle is not null)
+                {
+                    <MudText Typo="Typo.h6" Color="Color.Tertiary" Class="mud-text-secondary">@_work.Subtitle</MudText>
+                }
+                @if (_work.Authors.Count > 0)
+                {
+                    <MudText Typo="Typo.subtitle1" Class="mt-1">@string.Join(", ", _work.Authors.Select(a => a.Name))</MudText>
+                }
+                @if (DetailsLine(_work) is { Length: > 0 } details)
+                {
+                    <MudText Typo="Typo.body2" Class="mud-text-secondary mt-1">@details</MudText>
+                }
+                @if (_work.Description is not null)
+                {
+                    <MudText Typo="Typo.body1" Class="mt-4" Style="white-space: pre-line">@_work.Description</MudText>
+                }
+            </MudItem>
+        </MudGrid>
+    }
+</MudContainer>
+
+@code {
+    [Parameter]
+    public required string WorkKey { get; set; }
+
+    private WorkDetailDto? _work;
+    private bool _loading = true;
+    private bool _notFound;
+    private string? _error;
+
+    // Cancelled when the user moves to another book, so a slower earlier load can't overwrite it
+    private CancellationTokenSource? _loadCts;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Skip the prerender pass so each visit only loads the book once
+        if (!RendererInfo.IsInteractive) return;
+
+        if (_work?.OpenLibraryKey == WorkKey) return;
+
+        _loadCts?.CancelAsync();
+        _loadCts?.Dispose();
+        _loadCts = new CancellationTokenSource();
+        var ct = _loadCts.Token;
+
+        _loading = true;
+        _notFound = false;
+        _error = null;
+        _work = null;
+
+        try
+        {
+            using var response = await Http.GetAsync($"api/book/{Uri.EscapeDataString(WorkKey)}", ct);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _notFound = true;
+            }
+            else
+            {
+                response.EnsureSuccessStatusCode();
+                var work = await response.Content.ReadFromJsonAsync<WorkDetailDto>(ct);
+                ct.ThrowIfCancellationRequested();
+                _work = work;
+
+                // Open Library merged this work into another; show the canonical URL.
+                if (_work is not null && _work.OpenLibraryKey != WorkKey)
+                    Navigation.NavigateTo($"/book/{_work.OpenLibraryKey}", replace: true);
+            }
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // A newer load replaced this one and owns the page state now.
+            return;
+        }
+        catch (HttpRequestException)
+        {
+            _error = "We couldn't load this book. Please try again.";
+        }
+
+        _loading = false;
+    }
+
+    public void Dispose()
+    {
+        _loadCts?.Cancel();
+        _loadCts?.Dispose();
+    }
+    
+    /// <summary>
+    ///     Concatenates year, publisher and pages for display
+    /// </summary>
+    private static string DetailsLine(WorkDetailDto work)
+    {
+        string?[] parts =
+        [
+            work.FirstPublishYear?.ToString(),
+            work.Publisher,
+            work.NumberOfPages is { } pages ? $"{pages} pages" : null,
+        ];
+        return string.Join(" | ", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+    }
+}

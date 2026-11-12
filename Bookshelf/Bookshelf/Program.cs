@@ -1,7 +1,9 @@
 using Bookshelf.Auth;
 using Bookshelf.Components;
 using Bookshelf.Data;
+using Bookshelf.Data.Books;
 using Bookshelf.Endpoints;
+using Bookshelf.Services;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -55,6 +57,16 @@ builder.Services.ConfigureApplicationCookie(o =>
 
 builder.Services.AddMudServices();
 
+builder.Services.AddHttpClient<OpenLibraryClient>(client =>
+{
+    client.BaseAddress = new Uri("https://openlibrary.org/");
+    // Open Library asks API clients to identify themselves.
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Bookshelf/1.0");
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
+builder.Services.AddScoped<BookRepository>();
+builder.Services.AddScoped<BookCatalogService>();
+
 // Interactive pages are prerendered on the server, so components that inject HttpClient need one here too
 builder.Services.AddScoped(sp => new HttpClient { BaseAddress = new Uri(sp.GetRequiredService<NavigationManager>().BaseUri) });
 
@@ -97,5 +109,6 @@ app.MapRazorComponents<App>()
     .AddAdditionalAssemblies(typeof(Bookshelf.Client._Imports).Assembly);
 
 app.MapAuthEndpoints();
+app.MapBookEndpoints();
 
 app.Run();
