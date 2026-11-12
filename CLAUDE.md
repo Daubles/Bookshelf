@@ -32,5 +32,8 @@ Blazor Web App on .NET 10 with global Interactive WebAssembly rendering (prerend
 ### Data
 `Data/AppDbContext.cs` defines `AppUser : IdentityUser` (adds `FirstName`) and `AppDbContext : IdentityDbContext<AppUser>`. Migrations are in `Bookshelf/Bookshelf/Migrations`.
 
+### Logging
+The server uses Serilog, configured in `Program.cs` with a bootstrap logger and `AddSerilog`. It writes to the console and to the Postgres `logs` table, which the sink creates automatically. That table is not part of `AppDbContext` or the migrations, and its columns are defined in `Logging/LogColumns.cs`. Log levels are set in the `Serilog` section of appsettings, not `Logging`. Inject `ILogger<T>` as usual. The WASM client doesn't ship its logs to the server.
+
 ### UI
 The UI uses MudBlazor (registered with `AddMudServices()` in both projects; CSS/JS included in `App.razor`). Bootstrap and the template's NavMenu have been removed, so use MudBlazor components rather than Bootstrap classes.
