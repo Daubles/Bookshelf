@@ -12,11 +12,11 @@ public static class BookEndpoints
         var routeBuilder = app.MapGroup(EndpointGroup)
             .WithTags("Books");
 
-        routeBuilder.MapGet("search/{query}", async (string query, BookCatalogService catalog, CancellationToken ct) =>
+        routeBuilder.MapGet("search", async (string q, BookCatalogService catalog, CancellationToken ct) =>
         {
             try
             {
-                return Results.Ok(await catalog.SearchAsync(query, SearchLimit, ct));
+                return Results.Ok(await catalog.SearchAsync(q, SearchLimit, ct));
             }
             catch (HttpRequestException)
             {

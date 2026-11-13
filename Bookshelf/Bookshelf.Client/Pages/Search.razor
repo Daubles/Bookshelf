@@ -66,7 +66,7 @@
         try
         {
             var books = await Http.GetFromJsonAsync<List<BookSummaryDto>>(
-                $"api/book/search/{Uri.EscapeDataString(Query)}", ct);
+                $"api/book/search?q={Uri.EscapeDataString(Query)}", ct);
             ct.ThrowIfCancellationRequested();
             _books = books ?? [];
         }
