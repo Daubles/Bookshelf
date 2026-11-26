@@ -28,22 +28,22 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : IdentityDbCo
 
         builder.Entity<Work>(w =>
         {
-            w.Property(x => x.OpenLibraryKey).HasMaxLength(20);
+            w.Property(x => x.OpenLibraryKey).HasMaxLength(ColumnLimits.OpenLibraryKey);
             w.HasIndex(x => x.OpenLibraryKey).IsUnique();
-            w.Property(x => x.Title).HasMaxLength(500);
-            w.Property(x => x.Subtitle).HasMaxLength(500);
+            w.Property(x => x.Title).HasMaxLength(ColumnLimits.WorkTitle);
+            w.Property(x => x.Subtitle).HasMaxLength(ColumnLimits.Subtitle);
             w.Property(x => x.Description).HasColumnType("text");
-            w.Property(x => x.Publisher).HasMaxLength(300);
-            w.Property(x => x.SourceEditionKey).HasMaxLength(20);
+            w.Property(x => x.Publisher).HasMaxLength(ColumnLimits.Publisher);
+            w.Property(x => x.SourceEditionKey).HasMaxLength(ColumnLimits.OpenLibraryKey);
         });
 
         builder.Entity<Author>(a =>
         {
-            a.Property(x => x.OpenLibraryKey).HasMaxLength(20);
+            a.Property(x => x.OpenLibraryKey).HasMaxLength(ColumnLimits.OpenLibraryKey);
             a.HasIndex(x => x.OpenLibraryKey).IsUnique();
-            a.Property(x => x.Name).HasMaxLength(300);
-            a.Property(x => x.BirthDate).HasMaxLength(50);
-            a.Property(x => x.DeathDate).HasMaxLength(50);
+            a.Property(x => x.Name).HasMaxLength(ColumnLimits.AuthorName);
+            a.Property(x => x.BirthDate).HasMaxLength(ColumnLimits.Date);
+            a.Property(x => x.DeathDate).HasMaxLength(ColumnLimits.Date);
             a.Property(x => x.Bio).HasColumnType("text");
         });
 

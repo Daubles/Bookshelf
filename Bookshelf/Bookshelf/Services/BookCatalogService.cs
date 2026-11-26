@@ -17,13 +17,6 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
     private const int EditionsToFetch = 50;
     private const int MaxSaveAttempts = 2;
 
-    // Column limits from AppDbContext; values are trimmed to fit rather than failing the save.
-    private const int WorkTitleMax = 500;
-    private const int SubtitleMax = 500;
-    private const int PublisherMax = 300;
-    private const int AuthorNameMax = 300;
-    private const int DateMax = 50;
-
     public async Task<List<BookSummaryDto>> SearchAsync(string query, int limit, CancellationToken ct = default)
     {
         var result = await openLibrary.SearchAsync(query, limit, ct);
@@ -205,12 +198,12 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
 
         // Work out every value from the Open Library data first, then either create or update.
         // OpenLibraryClient.GetWorkAsync only returns works that have a title.
-        var title = Truncate(olWork.Title!, WorkTitleMax)!;
-        var subtitle = Truncate(olWork.Subtitle, SubtitleMax);
+        var title = Truncate(olWork.Title!, ColumnLimits.WorkTitle)!;
+        var subtitle = Truncate(olWork.Subtitle, ColumnLimits.Subtitle);
 
         // Publisher and page count only exist on editions, so take them from one chosen edition.
         var sourceEdition = ChooseSourceEdition(olEditions);
-        var publisher = Truncate(sourceEdition?.Publishers?.FirstOrDefault(), PublisherMax);
+        var publisher = Truncate(sourceEdition?.Publishers?.FirstOrDefault(), ColumnLimits.Publisher);
         var numberOfPages = sourceEdition?.NumberOfPages is > 0 ? sourceEdition.NumberOfPages : null;
         var sourceEditionKey = sourceEdition is null ? null : StripPrefix(sourceEdition.Key);
 
@@ -288,10 +281,10 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
                 {
                     OpenLibraryKey = key,
                     // OpenLibraryClient.GetAuthorAsync only returns authors that have a name.
-                    Name = Truncate(olAuthor.Name!, AuthorNameMax)!,
+                    Name = Truncate(olAuthor.Name!, ColumnLimits.AuthorName)!,
                     Bio = olAuthor.Bio,
-                    BirthDate = Truncate(olAuthor.BirthDate, DateMax),
-                    DeathDate = Truncate(olAuthor.DeathDate, DateMax),
+                    BirthDate = Truncate(olAuthor.BirthDate, ColumnLimits.Date),
+                    DeathDate = Truncate(olAuthor.DeathDate, ColumnLimits.Date),
                     PhotoId = FirstCover(olAuthor.Photos),
                     LastFetchedAt = now,
                 };
@@ -300,10 +293,10 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
             else if (olAuthor is not null)
             {
                 // Authors are always overwritten on refresh (unlike works).
-                author.Name = Truncate(olAuthor.Name!, AuthorNameMax)!;
+                author.Name = Truncate(olAuthor.Name!, ColumnLimits.AuthorName)!;
                 author.Bio = olAuthor.Bio;
-                author.BirthDate = Truncate(olAuthor.BirthDate, DateMax);
-                author.DeathDate = Truncate(olAuthor.DeathDate, DateMax);
+                author.BirthDate = Truncate(olAuthor.BirthDate, ColumnLimits.Date);
+                author.DeathDate = Truncate(olAuthor.DeathDate, ColumnLimits.Date);
                 author.PhotoId = FirstCover(olAuthor.Photos);
                 author.LastFetchedAt = now;
             }
@@ -340,6 +333,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
     private static int? ParseYear(string? date) =>
         date is not null && YearRegex().Match(date) is { Success: true } m ? int.Parse(m.Value) : null;
 
+    // Values are trimmed to fit their column (see ColumnLimits) rather than failing the save.
     private static string? Truncate(string? value, int max)
     {
         if (value is null || value.Length <= max)
