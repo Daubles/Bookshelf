@@ -5,7 +5,6 @@ namespace Bookshelf.Endpoints;
 public static class BookEndpoints
 {
     private const string EndpointGroup = "/api/book";
-    private const int SearchLimit = 5;
 
     public static void MapBookEndpoints(this IEndpointRouteBuilder app)
     {
@@ -16,7 +15,7 @@ public static class BookEndpoints
         {
             try
             {
-                return Results.Ok(await catalog.SearchAsync(q, SearchLimit, ct));
+                return Results.Ok(await catalog.SearchAsync(q, ct));
             }
             catch (HttpRequestException)
             {

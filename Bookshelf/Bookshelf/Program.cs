@@ -88,6 +88,10 @@ try
         client.Timeout = TimeSpan.FromSeconds(20);
     });
     builder.Services.AddScoped<BookRepository>();
+    builder.Services.AddOptions<BookCatalogOptions>()
+        .BindConfiguration(BookCatalogOptions.SectionName)
+        .ValidateDataAnnotations()
+        .ValidateOnStart();
     builder.Services.AddScoped<BookCatalogService>();
 
     // Interactive pages are prerendered on the server, so components that inject HttpClient need one here too

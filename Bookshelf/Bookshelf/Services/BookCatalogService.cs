@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Bookshelf.Client.Models;
 using Bookshelf.Data.Books;
 using Bookshelf.Models;
+using Microsoft.Extensions.Options;
 using static Bookshelf.Services.OpenLibraryClient;
 
 namespace Bookshelf.Services;
@@ -11,15 +12,17 @@ namespace Bookshelf.Services;
 /// A work and its authors are stored the first time the book page is opened (with publisher and
 /// page count taken from one of its editions), then served from the database until they go stale.
 /// </summary>
-public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepository repository, ILogger<BookCatalogService> logger)
+public partial class BookCatalogService(
+    OpenLibraryClient openLibrary,
+    BookRepository repository,
+    IOptions<BookCatalogOptions> options,
+    ILogger<BookCatalogService> logger)
 {
-    private static readonly TimeSpan RefreshAfter = TimeSpan.FromDays(30);
-    private const int EditionsToFetch = 50;
-    private const int MaxSaveAttempts = 2;
+    private readonly BookCatalogOptions _options = options.Value;
 
-    public async Task<List<BookSummaryDto>> SearchAsync(string query, int limit, CancellationToken ct = default)
+    public async Task<List<BookSummaryDto>> SearchAsync(string query, CancellationToken ct = default)
     {
-        var result = await openLibrary.SearchAsync(query, limit, ct);
+        var result = await openLibrary.SearchAsync(query, _options.SearchLimit, ct);
 
         return result?.Docs
             .Select(doc => new BookSummaryDto
@@ -111,13 +114,13 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
             work = await repository.GetWorkWithDetailsAsync(finalKey, ct);
             if (IsFresh(work))
                 return work!.ToDetailDto();
-            if (attempt == MaxSaveAttempts)
+            if (attempt == _options.MaxSaveAttempts)
                 throw new InvalidOperationException($"Couldn't save work {finalKey}.");
         }
     }
 
-    private static bool IsFresh(Work? work) =>
-        work is not null && DateTimeOffset.UtcNow - work.LastFetchedAt < RefreshAfter;
+    private bool IsFresh(Work? work) =>
+        work is not null && DateTimeOffset.UtcNow - work.LastFetchedAt < _options.RefreshAfter;
 
     private static bool NeedsEditionData(Work? work) =>
         work?.Publisher is null || work.NumberOfPages is null || work.CoverId is null || work.FirstPublishYear is null;
@@ -158,7 +161,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
     {
         try
         {
-            return await openLibrary.GetEditionsAsync(workKey, EditionsToFetch, ct);
+            return await openLibrary.GetEditionsAsync(workKey, _options.EditionsToFetch, ct);
         }
         catch (HttpRequestException ex)
         {
