@@ -75,7 +75,7 @@
             // A newer search replaced this one and owns the page state now.
             return;
         }
-        catch (HttpRequestException)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or NotSupportedException)
         {
             _error = "We couldn't load search results. Please try again.";
         }
