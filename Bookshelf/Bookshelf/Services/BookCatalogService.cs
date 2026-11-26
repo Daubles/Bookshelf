@@ -72,7 +72,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
 
             // Gone from Open Library (deleted, or no longer a usable work). Keep serving our copy,
             // but mark it checked so every page view doesn't ask Open Library again.
-            logger.LogInformation("Work {WorkKey} is no longer on Open Library; serving stored copy", workKey);
+            logger.LogWarning("Work {WorkKey} is no longer on Open Library; serving stored copy", workKey);
             work.LastFetchedAt = DateTimeOffset.UtcNow;
             await repository.TrySaveChangesAsync(ct);
             return work.ToDetailDto();
@@ -91,7 +91,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
 
         // Editions only fill fields that are still empty, so skip the (large) request when none are.
         var editionsTask = NeedsEditionData(work)
-            ? openLibrary.GetEditionsAsync(finalKey, EditionsToFetch, ct)
+            ? TryGetEditionsAsync(finalKey, ct)
             : Task.FromResult(new List<OpenLibraryEdition>());
         var authorsTask = GetAuthorsAsync(olWork, ct);
         var olEditions = await editionsTask;
@@ -118,8 +118,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
         work is not null && DateTimeOffset.UtcNow - work.LastFetchedAt < RefreshAfter;
 
     private static bool NeedsEditionData(Work? work) =>
-        work is null || work.Publisher is null || work.NumberOfPages is null
-        || work.CoverId is null || work.FirstPublishYear is null;
+        work?.Publisher is null || work.NumberOfPages is null || work.CoverId is null || work.FirstPublishYear is null;
 
     /// <summary>
     /// Fetches the work's authors. Returns their keys in order (each author's current key, after
@@ -151,6 +150,20 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
         }
 
         return (keys, authors);
+    }
+
+    private async Task<List<OpenLibraryEdition>> TryGetEditionsAsync(string workKey, CancellationToken ct)
+    {
+        try
+        {
+            return await openLibrary.GetEditionsAsync(workKey, EditionsToFetch, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Editions only add publisher, page count and fallbacks, so load the book without them.
+            logger.LogWarning(ex, "Couldn't fetch editions for work {WorkKey}", workKey);
+            return [];
+        }
     }
 
     private async Task<OpenLibraryAuthor?> TryGetAuthorAsync(string authorKey, CancellationToken ct)
