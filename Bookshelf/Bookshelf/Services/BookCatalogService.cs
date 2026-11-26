@@ -84,6 +84,15 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
         var finalKey = StripPrefix(olWork.Key);
         if (finalKey != workKey)
         {
+            // A row under the old key is a leftover copy of the merged work that would never be
+            // refreshed again, so drop it. Later visits to the old key just follow the redirect.
+            if (work is not null)
+            {
+                logger.LogInformation("Work {WorkKey} was merged into {FinalKey}; removing stored copy", workKey, finalKey);
+                repository.RemoveWork(work);
+                await repository.TrySaveChangesAsync(ct);
+            }
+
             work = await repository.GetWorkWithDetailsAsync(finalKey, ct);
             if (IsFresh(work))
                 return work!.ToDetailDto();

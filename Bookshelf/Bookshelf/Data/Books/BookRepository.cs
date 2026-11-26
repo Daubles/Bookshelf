@@ -23,6 +23,9 @@ public class BookRepository(AppDbContext db, ILogger<BookRepository> logger)
 
     public void AddAuthor(Author author) => db.Authors.Add(author);
 
+    /// <summary>Removes a work and its author links (the authors themselves are kept).</summary>
+    public void RemoveWork(Work work) => db.Works.Remove(work);
+
     /// <summary>
     /// Saves pending changes. Returns false if the save failed (most likely because another request
     /// stored the same rows at the same moment); pending changes are then discarded.
