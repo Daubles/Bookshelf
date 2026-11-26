@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Bookshelf.Client.Models;
 using Bookshelf.Data.Books;
 using Bookshelf.Models;
+using Microsoft.Extensions.Options;
 using static Bookshelf.Services.OpenLibraryClient;
 
 namespace Bookshelf.Services;
@@ -11,22 +12,17 @@ namespace Bookshelf.Services;
 /// A work and its authors are stored the first time the book page is opened (with publisher and
 /// page count taken from one of its editions), then served from the database until they go stale.
 /// </summary>
-public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepository repository, ILogger<BookCatalogService> logger)
+public partial class BookCatalogService(
+    OpenLibraryClient openLibrary,
+    BookRepository repository,
+    IOptions<BookCatalogOptions> options,
+    ILogger<BookCatalogService> logger)
 {
-    private static readonly TimeSpan RefreshAfter = TimeSpan.FromDays(30);
-    private const int EditionsToFetch = 50;
-    private const int MaxSaveAttempts = 2;
+    private readonly BookCatalogOptions _options = options.Value;
 
-    // Column limits from AppDbContext; values are trimmed to fit rather than failing the save.
-    private const int WorkTitleMax = 500;
-    private const int SubtitleMax = 500;
-    private const int PublisherMax = 300;
-    private const int AuthorNameMax = 300;
-    private const int DateMax = 50;
-
-    public async Task<List<BookSummaryDto>> SearchAsync(string query, int limit, CancellationToken ct = default)
+    public async Task<List<BookSummaryDto>> SearchAsync(string query, CancellationToken ct = default)
     {
-        var result = await openLibrary.SearchAsync(query, limit, ct);
+        var result = await openLibrary.SearchAsync(query, _options.SearchLimit, ct);
 
         return result?.Docs
             .Select(doc => new BookSummaryDto
@@ -72,7 +68,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
 
             // Gone from Open Library (deleted, or no longer a usable work). Keep serving our copy,
             // but mark it checked so every page view doesn't ask Open Library again.
-            logger.LogInformation("Work {WorkKey} is no longer on Open Library; serving stored copy", workKey);
+            logger.LogWarning("Work {WorkKey} is no longer on Open Library; serving stored copy", workKey);
             work.LastFetchedAt = DateTimeOffset.UtcNow;
             await repository.TrySaveChangesAsync(ct);
             return work.ToDetailDto();
@@ -84,6 +80,15 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
         var finalKey = StripPrefix(olWork.Key);
         if (finalKey != workKey)
         {
+            // A row under the old key is a leftover copy of the merged work that would never be
+            // refreshed again, so drop it. Later visits to the old key just follow the redirect.
+            if (work is not null)
+            {
+                logger.LogInformation("Work {WorkKey} was merged into {FinalKey}; removing stored copy", workKey, finalKey);
+                repository.RemoveWork(work);
+                await repository.TrySaveChangesAsync(ct);
+            }
+
             work = await repository.GetWorkWithDetailsAsync(finalKey, ct);
             if (IsFresh(work))
                 return work!.ToDetailDto();
@@ -91,7 +96,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
 
         // Editions only fill fields that are still empty, so skip the (large) request when none are.
         var editionsTask = NeedsEditionData(work)
-            ? openLibrary.GetEditionsAsync(finalKey, EditionsToFetch, ct)
+            ? TryGetEditionsAsync(finalKey, ct)
             : Task.FromResult(new List<OpenLibraryEdition>());
         var authorsTask = GetAuthorsAsync(olWork, ct);
         var olEditions = await editionsTask;
@@ -109,17 +114,16 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
             work = await repository.GetWorkWithDetailsAsync(finalKey, ct);
             if (IsFresh(work))
                 return work!.ToDetailDto();
-            if (attempt == MaxSaveAttempts)
+            if (attempt == _options.MaxSaveAttempts)
                 throw new InvalidOperationException($"Couldn't save work {finalKey}.");
         }
     }
 
-    private static bool IsFresh(Work? work) =>
-        work is not null && DateTimeOffset.UtcNow - work.LastFetchedAt < RefreshAfter;
+    private bool IsFresh(Work? work) =>
+        work is not null && DateTimeOffset.UtcNow - work.LastFetchedAt < _options.RefreshAfter;
 
     private static bool NeedsEditionData(Work? work) =>
-        work is null || work.Publisher is null || work.NumberOfPages is null
-        || work.CoverId is null || work.FirstPublishYear is null;
+        work?.Publisher is null || work.NumberOfPages is null || work.CoverId is null || work.FirstPublishYear is null;
 
     /// <summary>
     /// Fetches the work's authors. Returns their keys in order (each author's current key, after
@@ -153,6 +157,20 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
         return (keys, authors);
     }
 
+    private async Task<List<OpenLibraryEdition>> TryGetEditionsAsync(string workKey, CancellationToken ct)
+    {
+        try
+        {
+            return await openLibrary.GetEditionsAsync(workKey, _options.EditionsToFetch, ct);
+        }
+        catch (HttpRequestException ex)
+        {
+            // Editions only add publisher, page count and fallbacks, so load the book without them.
+            logger.LogWarning(ex, "Couldn't fetch editions for work {WorkKey}", workKey);
+            return [];
+        }
+    }
+
     private async Task<OpenLibraryAuthor?> TryGetAuthorAsync(string authorKey, CancellationToken ct)
     {
         try
@@ -183,12 +201,12 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
 
         // Work out every value from the Open Library data first, then either create or update.
         // OpenLibraryClient.GetWorkAsync only returns works that have a title.
-        var title = Truncate(olWork.Title!, WorkTitleMax)!;
-        var subtitle = Truncate(olWork.Subtitle, SubtitleMax);
+        var title = Truncate(olWork.Title!, ColumnLimits.WorkTitle)!;
+        var subtitle = Truncate(olWork.Subtitle, ColumnLimits.Subtitle);
 
         // Publisher and page count only exist on editions, so take them from one chosen edition.
         var sourceEdition = ChooseSourceEdition(olEditions);
-        var publisher = Truncate(sourceEdition?.Publishers?.FirstOrDefault(), PublisherMax);
+        var publisher = Truncate(sourceEdition?.Publishers?.FirstOrDefault(), ColumnLimits.Publisher);
         var numberOfPages = sourceEdition?.NumberOfPages is > 0 ? sourceEdition.NumberOfPages : null;
         var sourceEditionKey = sourceEdition is null ? null : StripPrefix(sourceEdition.Key);
 
@@ -266,10 +284,10 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
                 {
                     OpenLibraryKey = key,
                     // OpenLibraryClient.GetAuthorAsync only returns authors that have a name.
-                    Name = Truncate(olAuthor.Name!, AuthorNameMax)!,
+                    Name = Truncate(olAuthor.Name!, ColumnLimits.AuthorName)!,
                     Bio = olAuthor.Bio,
-                    BirthDate = Truncate(olAuthor.BirthDate, DateMax),
-                    DeathDate = Truncate(olAuthor.DeathDate, DateMax),
+                    BirthDate = Truncate(olAuthor.BirthDate, ColumnLimits.Date),
+                    DeathDate = Truncate(olAuthor.DeathDate, ColumnLimits.Date),
                     PhotoId = FirstCover(olAuthor.Photos),
                     LastFetchedAt = now,
                 };
@@ -278,10 +296,10 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
             else if (olAuthor is not null)
             {
                 // Authors are always overwritten on refresh (unlike works).
-                author.Name = Truncate(olAuthor.Name!, AuthorNameMax)!;
+                author.Name = Truncate(olAuthor.Name!, ColumnLimits.AuthorName)!;
                 author.Bio = olAuthor.Bio;
-                author.BirthDate = Truncate(olAuthor.BirthDate, DateMax);
-                author.DeathDate = Truncate(olAuthor.DeathDate, DateMax);
+                author.BirthDate = Truncate(olAuthor.BirthDate, ColumnLimits.Date);
+                author.DeathDate = Truncate(olAuthor.DeathDate, ColumnLimits.Date);
                 author.PhotoId = FirstCover(olAuthor.Photos);
                 author.LastFetchedAt = now;
             }
@@ -318,6 +336,7 @@ public partial class BookCatalogService(OpenLibraryClient openLibrary, BookRepos
     private static int? ParseYear(string? date) =>
         date is not null && YearRegex().Match(date) is { Success: true } m ? int.Parse(m.Value) : null;
 
+    // Values are trimmed to fit their column (see ColumnLimits) rather than failing the save.
     private static string? Truncate(string? value, int max)
     {
         if (value is null || value.Length <= max)
